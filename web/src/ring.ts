@@ -1,14 +1,15 @@
 import {
   AuthFlowKind,
   Pubky,
-  type GrantAuthFlow,
+  type AuthFlow,
   type Session,
 } from "@synonymdev/pubky";
 import type { Identity } from "./types";
 
 const APP_CLIENT_ID = "pubky-watcher-canvas";
 const CAPABILITIES = "/pub/pubky-watcher-canvas/:rw" as const;
-const SESSION_KEY = `${APP_CLIENT_ID}:session`;
+const SESSION_KEY = `${APP_CLIENT_ID}:cookie-session`;
+const LEGACY_GRANT_SESSION_KEY = `${APP_CLIENT_ID}:session`;
 const pubky = new Pubky();
 
 export type RingAttempt = {
@@ -17,10 +18,8 @@ export type RingAttempt = {
   cancel: () => void;
 };
 
-export async function startRingAuth(): Promise<RingAttempt> {
-  const flow = await pubky.startGrantAuthFlow(CAPABILITIES, AuthFlowKind.signin(), {
-    clientId: APP_CLIENT_ID,
-  });
+export function startRingAuth(): RingAttempt {
+  const flow = pubky.startCookieAuthFlow(CAPABILITIES, AuthFlowKind.signin());
   const authorizationUrl = flow.authorizationUrl;
   if (!authorizationUrl.startsWith("pubkyauth://")) {
     flow.free();
@@ -36,42 +35,29 @@ export async function startRingAuth(): Promise<RingAttempt> {
 }
 
 export async function restoreSavedIdentity(): Promise<Identity | undefined> {
-  const savedId = localStorage.getItem(SESSION_KEY);
-  if (!savedId) return undefined;
+  localStorage.removeItem(LEGACY_GRANT_SESSION_KEY);
+  const exported = localStorage.getItem(SESSION_KEY);
+  if (!exported) return undefined;
 
-  const store = pubky.browserSessionStore;
   try {
-    const session = await store.restore(savedId);
+    const session = await pubky.restoreSession(exported);
     return identityFromSession(session);
   } catch (error) {
     if (!isInvalidSavedSessionError(error)) throw error;
     localStorage.removeItem(SESSION_KEY);
-    try {
-      await store.remove(savedId);
-    } catch {
-      // IndexedDB may already have removed an invalid record.
-    }
     return undefined;
-  } finally {
-    store.free();
   }
 }
 
 export async function signOut(identity: Identity): Promise<void> {
-  const savedId = localStorage.getItem(SESSION_KEY);
-  await identity.session.signout();
-  localStorage.removeItem(SESSION_KEY);
-  if (!savedId) return;
-
-  const store = pubky.browserSessionStore;
   try {
-    await store.remove(savedId);
+    await identity.session.signout();
   } finally {
-    store.free();
+    localStorage.removeItem(SESSION_KEY);
   }
 }
 
-function awaitRingApproval(flow: GrantAuthFlow) {
+function awaitRingApproval(flow: AuthFlow) {
   let cancelled = false;
   let freed = false;
   const free = () => {
@@ -104,17 +90,7 @@ function awaitRingApproval(flow: GrantAuthFlow) {
 }
 
 export async function saveSession(session: Session): Promise<Identity> {
-  const store = pubky.browserSessionStore;
-  try {
-    const stored = await store.save(session);
-    try {
-      localStorage.setItem(SESSION_KEY, stored.id);
-    } finally {
-      stored.free();
-    }
-  } finally {
-    store.free();
-  }
+  localStorage.setItem(SESSION_KEY, session.export());
   return identityFromSession(session);
 }
 

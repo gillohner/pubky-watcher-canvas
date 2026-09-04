@@ -76,7 +76,7 @@ export function App() {
     let attempt: RingAttempt | undefined;
     let approvalAccepted = false;
     setBusy(true);
-    setStatus("Creating a Pubky Ring grant request…");
+    setStatus("Creating a Pubky Ring cookie-auth request…");
     try {
       attempt = await startRingAuth();
       ringAttempt.current = attempt;
@@ -196,7 +196,7 @@ export function App() {
       </header>
 
       <section className="pipeline" aria-label="Data flow">
-        <Step number="1" title="Pubky Ring" detail="Grant session" active={busy && !identity} />
+        <Step number="1" title="Pubky Ring" detail="Cookie session" active={busy && !identity} />
         <Arrow />
         <Step number="2" title="Your homeserver" detail="Stores move JSON" active={busy && !!identity} />
         <Arrow />
@@ -297,7 +297,7 @@ export function App() {
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Pubky Ring sign in">
           <div className="qr-modal">
             <button className="modal-close" onClick={closeRingQr} aria-label="Close Ring QR">×</button>
-            <p className="eyebrow">PUBKYAUTH:// GRANT REQUEST</p>
+            <p className="eyebrow">PUBKYAUTH:// COOKIE AUTH</p>
             <h2>Scan with Pubky Ring</h2>
             <p>Ring will independently show the requested canvas capability before you approve.</p>
             <img src={ringQr} alt="Pubky Ring authorization QR code" />
@@ -305,7 +305,7 @@ export function App() {
               <a className="connect" href={ringUrl}>Authorize with Pubky Ring</a>
               <button className="ring-button" onClick={() => void copyRingUrl()}>Copy link</button>
             </div>
-            <small>The SDK completes and saves the session only after Ring approves the request.</small>
+            <small>The SDK creates the cookie session only after Ring approves the request.</small>
           </div>
         </div>
       )}

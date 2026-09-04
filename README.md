@@ -1,6 +1,6 @@
 # Pubky Watcher Canvas
 
-A deliberately small multiplayer pixel game for understanding [`pubky-watcher`](https://github.com/tipogi/pubky-nexus/pull/7). Players authenticate through a grant-based Pubky Ring flow, publish moves to their own homeserver, and watch a Rust service discover those moves through `/events-stream`.
+A deliberately small multiplayer pixel game for understanding [`pubky-watcher`](https://github.com/tipogi/pubky-nexus/pull/7). Players authenticate through Pubky Ring's cookie-auth flow, publish moves to their own homeserver, and watch a Rust service discover those moves through `/events-stream`.
 
 **Live demo:** <https://eventky.app/watcher-canvas/>
 
@@ -17,7 +17,7 @@ Each stage unlocks when every visible cell has been painted. There is no differe
 ```text
 Browser                         Player homeserver                Rust demo service
    │                                   │                                │
-   ├─ pubkyauth:// grant ► Ring QR                                       │
+   ├─ pubkyauth://signin ► Ring QR                                       │
    │◄──────── SDK Session via relay ───┤                                │
    │                                   │                                │
    ├─ session.storage.putJson(move) ──►│                                │
@@ -28,11 +28,10 @@ Browser                         Player homeserver                Rust demo servi
 
 Important boundaries:
 
-- The canvas uses the grant-based Pubky Ring flow from
-  [`pubky-app-templates`](https://github.com/pubky/pubky-app-templates).
-- Only `GrantAuthFlow.awaitApproval()` returning a Pubky SDK `Session` authenticates the player.
-- The SDK browser session store persists the session, and its returned record ID is saved in
-  `localStorage` so the session can be restored after a reload.
+- The canvas uses `startCookieAuthFlow()` so it works before Ring supports grant auth.
+- Only `AuthFlow.awaitApproval()` returning a Pubky SDK `Session` authenticates the player.
+- `session.export()` persists non-secret cookie-session metadata in `localStorage`; the actual
+  session cookie remains HTTP-only and `restoreSession()` restores the SDK session after reload.
 - The client requests only `/pub/pubky-watcher-canvas/:rw`.
 - The service constructs one `WatcherClient` and injects clones into `Watcher::key_stream` and the move handler.
 - Every user key has its own event stream and cursor. Users are grouped by their resolved homeserver
@@ -61,8 +60,8 @@ different origins.
 
 ## Read the important parts
 
-- `web/src/ring.ts` — template-based Ring grant lifecycle, approval, browser-store persistence,
-  reload restoration, and sign out.
+- `web/src/ring.ts` — Ring cookie-auth lifecycle, approval, metadata persistence, reload
+  restoration, and sign out.
 - `web/src/moves.ts` — writes one tiny JSON move through the authenticated session.
 - `src/watcher.rs` — groups registered keys by homeserver, injects `WatcherClient`, advances cursors only after successful handling, reads resources, and applies moves.
 - `src/game.rs` — validation and the requested resize sequence.

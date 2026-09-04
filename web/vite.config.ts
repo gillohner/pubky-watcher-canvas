@@ -5,7 +5,7 @@ export default defineConfig(({ command }) => ({
   base: command === "build" ? "/watcher-canvas/" : "/",
   plugins: [react()],
   build: {
-    // Most of this is the Pubky SDK/WASM bridge used by Ring auth and storage.
+    // Most of this is the Pubky SDK/WASM bridge used by Ring cookie auth and storage.
     chunkSizeWarningLimit: 3_000,
   },
   server: {
