@@ -34,6 +34,8 @@ Important boundaries:
   popup, while **Show Ring QR** renders a direct `pubkyauth://signin` request for Ring.
 - The client requests only `/pub/pubky-watcher-canvas/:rw`.
 - The service constructs one `WatcherClient` and injects clones into `Watcher::key_stream` and the move handler.
+- Every user key has its own event stream and cursor. Users are grouped by their resolved homeserver
+  key only because `key_stream` targets one server endpoint and polls each hosted user separately.
 - The watcher owns Pubky transport. The demo owns cursors, polling, move validation, board rules, and SSE.
 - State and cursors are intentionally in memory. Restarting the server resets the demo.
 

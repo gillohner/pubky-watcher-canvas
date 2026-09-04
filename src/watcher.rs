@@ -111,6 +111,9 @@ async fn wait_for_shutdown(mut shutdown_rx: watch::Receiver<bool>) -> bool {
 async fn poll_once(state: &AppState, shutdown_rx: watch::Receiver<bool>) {
     let registrations: Vec<Registration> =
         state.registrations.read().await.values().cloned().collect();
+    // A user key identifies the tenant; its resolved homeserver key identifies
+    // the server endpoint. Grouping shares that endpoint, not cursors or feeds:
+    // KeyStreamWatcher still requests and advances each user stream separately.
     let mut groups: HashMap<String, Vec<Registration>> = HashMap::new();
     for registration in registrations {
         groups
