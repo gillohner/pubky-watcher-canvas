@@ -12,9 +12,14 @@ export type RingAttempt = {
 };
 
 export async function createRingAttempt(): Promise<RingAttempt> {
-  const flow = await pubky.startGrantAuthFlow(CAPABILITIES, AuthFlowKind.signin(), {
-    clientId: "pubky-watcher-canvas",
-  });
+  // Keep the direct Ring path compatible with the original canvas example:
+  // the QR payload is a pubkyauth://signin request. Passport uses grant auth.
+  const flow = pubky.startCookieAuthFlow(CAPABILITIES, AuthFlowKind.signin());
+  const authorizationUrl = flow.authorizationUrl;
+  if (!authorizationUrl.startsWith("pubkyauth://")) {
+    flow.free();
+    throw new Error("Ring authorization did not produce a pubkyauth:// request");
+  }
   let freed = false;
   let cancelled = false;
   const free = () => {
@@ -24,7 +29,7 @@ export async function createRingAttempt(): Promise<RingAttempt> {
   };
 
   return {
-    authorizationUrl: flow.authorizationUrl,
+    authorizationUrl,
     waitForSession: async () => {
       try {
         const deadline = Date.now() + TIMEOUT_MS;

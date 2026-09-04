@@ -17,7 +17,8 @@ Each stage unlocks when every visible cell has been painted. There is no differe
 ```text
 Browser                         Player homeserver                Rust demo service
    │                                   │                                │
-   ├─ start grant auth ──► Passport or Ring QR                           │
+   ├─ grant auth ────────► Passport popup                                │
+   ├─ pubkyauth://signin ► Ring QR                                       │
    │◄──────── SDK Session via relay ───┤                                │
    │                                   │                                │
    ├─ session.storage.putJson(move) ──►│                                │
@@ -29,8 +30,8 @@ Browser                         Player homeserver                Rust demo servi
 Important boundaries:
 
 - Only the Pubky SDK `Session` authenticates the player. Passport popup messages are UI signals.
-- The canvas offers two grant-based paths: **Continue with Passport** opens Passport, while
-  **Show Ring QR** renders the SDK authorization request directly in the canvas for Ring.
+- The canvas offers two sign-in paths: **Continue with Passport** uses grant-based auth in a
+  popup, while **Show Ring QR** renders a direct `pubkyauth://signin` request for Ring.
 - The client requests only `/pub/pubky-watcher-canvas/:rw`.
 - The service constructs one `WatcherClient` and injects clones into `Watcher::key_stream` and the move handler.
 - The watcher owns Pubky transport. The demo owns cursors, polling, move validation, board rules, and SSE.
@@ -56,6 +57,7 @@ Passport requires HTTPS callbacks. For local HTTP development this demo omits ca
 ## Read the important parts
 
 - `web/src/passport.ts` — grant flow, popup, secure outcome acknowledgement, callback fallback, relay polling, and browser session store.
+- `web/src/ring.ts` — direct `pubkyauth://signin` QR compatibility path based on the original canvas example.
 - `web/src/moves.ts` — writes one tiny JSON move through the authenticated session.
 - `src/watcher.rs` — groups registered keys by homeserver, injects `WatcherClient`, advances cursors only after successful handling, reads resources, and applies moves.
 - `src/game.rs` — validation and the requested resize sequence.

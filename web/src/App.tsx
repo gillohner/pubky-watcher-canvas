@@ -55,7 +55,7 @@ export function App() {
 
   const showRingQr = async () => {
     setBusy(true);
-    setStatus("Creating a grant request for Pubky Ring…");
+    setStatus("Creating a pubkyauth:// request for Pubky Ring…");
     try {
       const attempt = await createRingAttempt();
       ringAttempt.current = attempt;
@@ -233,7 +233,7 @@ export function App() {
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Pubky Ring sign in">
           <div className="qr-modal">
             <button className="modal-close" onClick={closeRingQr} aria-label="Close Ring QR">×</button>
-            <p className="eyebrow">DIRECT RING COMPATIBILITY PATH</p>
+            <p className="eyebrow">PUBKYAUTH:// DIRECT RING PATH</p>
             <h2>Scan with Pubky Ring</h2>
             <p>Ring will independently show the requested canvas capability before you approve.</p>
             <img src={ringQr} alt="Pubky Ring authorization QR code" />
