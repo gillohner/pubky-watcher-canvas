@@ -1,0 +1,25 @@
+{
+  "name": "pubky-watcher-canvas-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@synonymdev/pubky": "0.11.0",
+    "@vitejs/plugin-react": "latest",
+    "qrcode": "latest",
+    "vite": "latest",
+    "typescript": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@types/qrcode": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
+}

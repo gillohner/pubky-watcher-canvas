@@ -1,0 +1,7 @@
+/target
+/web/node_modules
+/web/dist
+*.tsbuildinfo
+*.log
+.env
+.env.local

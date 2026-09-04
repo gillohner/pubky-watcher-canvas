@@ -1,0 +1,7 @@
+services:
+  watcher-canvas:
+    build: .
+    container_name: pubky-watcher-canvas
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3001"

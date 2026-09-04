@@ -1,0 +1,20 @@
+[package]
+name = "pubky-watcher-canvas"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "A tiny multiplayer canvas that demonstrates pubky-watcher"
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+axum = "0.8"
+pubky = "0.9.3"
+pubky-watcher = { git = "https://github.com/tipogi/pubky-nexus.git", rev = "81d893e69b94d32f135bf82f40d718d67ead54f6" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tower-http = { version = "0.6", features = ["fs", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

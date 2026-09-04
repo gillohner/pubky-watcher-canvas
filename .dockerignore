@@ -1,0 +1,5 @@
+.git
+target
+web/dist
+web/node_modules
+*.log
