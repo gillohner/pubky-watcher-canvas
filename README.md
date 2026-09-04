@@ -2,6 +2,8 @@
 
 A deliberately small multiplayer pixel game for understanding [`pubky-watcher`](https://github.com/tipogi/pubky-nexus/pull/7). Players authenticate through a grant-based [Pubky Passport](https://passport.pubky.app) popup, publish moves to their own homeserver, and watch a Rust service discover those moves through `/events-stream`.
 
+**Live demo:** <https://eventky.app/watcher-canvas/>
+
 The board begins at **1×1** and grows through exactly:
 
 ```text
@@ -38,7 +40,7 @@ The watcher dependency is pinned to the exact commit from the draft PR so the ex
 
 ## Run it
 
-Requirements: Rust stable, Node.js 20+, a Pubky identity, and Pubky Ring if you choose the Ring route in Passport.
+Requirements: Rust stable, Node.js 24+, a Pubky identity, and Pubky Ring if you use the direct QR route.
 
 ```bash
 cd web
