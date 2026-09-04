@@ -1,4 +1,9 @@
-use std::{collections::HashMap, io, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    io,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use async_trait::async_trait;
 use pubky::{Event, EventCursor, EventType, PublicKey};
@@ -12,8 +17,43 @@ use crate::{
 };
 
 const MOVES_PATH: &str = "/pub/pubky-watcher-canvas/moves/";
-const EVENTS_PER_POLL: u16 = 100;
+const EVENTS_PER_POLL: u16 = 50;
 const MAX_MOVE_BYTES: usize = 1_024;
+const SCHEDULER_TICK: Duration = Duration::from_secs(1);
+const HEALTHY_POLL_INTERVAL: Duration = Duration::from_secs(5);
+const INITIAL_RETRY_BACKOFF: Duration = Duration::from_secs(60);
+const MAX_RETRY_BACKOFF: Duration = Duration::from_secs(60 * 60);
+
+#[derive(Debug)]
+struct PollSchedule {
+    next_attempt: Instant,
+    retry_backoff: Duration,
+}
+
+impl PollSchedule {
+    fn ready(now: Instant) -> Self {
+        Self {
+            next_attempt: now,
+            retry_backoff: INITIAL_RETRY_BACKOFF,
+        }
+    }
+
+    fn is_due(&self, now: Instant) -> bool {
+        now >= self.next_attempt
+    }
+
+    fn record_success(&mut self, now: Instant) {
+        self.next_attempt = now + HEALTHY_POLL_INTERVAL;
+        self.retry_backoff = INITIAL_RETRY_BACKOFF;
+    }
+
+    fn record_failure(&mut self, now: Instant) -> Duration {
+        let delay = self.retry_backoff;
+        self.next_attempt = now + delay;
+        self.retry_backoff = self.retry_backoff.saturating_mul(2).min(MAX_RETRY_BACKOFF);
+        delay
+    }
+}
 
 #[derive(Clone)]
 struct MoveHandler {
@@ -89,12 +129,15 @@ impl MoveHandler {
 }
 
 pub async fn run(state: AppState, shutdown_rx: watch::Receiver<bool>) {
-    let mut interval = tokio::time::interval(Duration::from_millis(750));
+    let mut schedules = HashMap::new();
+    let mut interval = tokio::time::interval(SCHEDULER_TICK);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
         tokio::select! {
-            _ = interval.tick() => poll_once(&state, shutdown_rx.clone()).await,
+            _ = interval.tick() => {
+                poll_once(&state, &mut schedules, shutdown_rx.clone()).await
+            },
             changed = wait_for_shutdown(shutdown_rx.clone()) => {
                 if changed {
                     break;
@@ -108,7 +151,11 @@ async fn wait_for_shutdown(mut shutdown_rx: watch::Receiver<bool>) -> bool {
     shutdown_rx.changed().await.is_err() || *shutdown_rx.borrow()
 }
 
-async fn poll_once(state: &AppState, shutdown_rx: watch::Receiver<bool>) {
+async fn poll_once(
+    state: &AppState,
+    schedules: &mut HashMap<String, PollSchedule>,
+    shutdown_rx: watch::Receiver<bool>,
+) {
     let registrations: Vec<Registration> =
         state.registrations.read().await.values().cloned().collect();
     // A user key identifies the tenant; its resolved homeserver key identifies
@@ -121,20 +168,46 @@ async fn poll_once(state: &AppState, shutdown_rx: watch::Receiver<bool>) {
             .or_default()
             .push(registration);
     }
+    schedules.retain(|homeserver, _| groups.contains_key(homeserver));
 
     for (homeserver, registrations) in groups {
         if *shutdown_rx.borrow() {
             return;
         }
-        if let Err(error) =
-            poll_homeserver(state, &homeserver, registrations, shutdown_rx.clone()).await
-        {
-            warn!(%homeserver, %error, "watcher poll failed; cursor retained for retry");
-            state.game.write().await.note(
-                "retry",
-                format!("Watcher will retry {}: {error}", short_key(&homeserver)),
-            );
-            state.notify("retry");
+
+        let now = Instant::now();
+        let is_due = schedules
+            .get(&homeserver)
+            .is_none_or(|schedule| schedule.is_due(now));
+        if !is_due {
+            continue;
+        }
+
+        let result = poll_homeserver(state, &homeserver, registrations, shutdown_rx.clone()).await;
+        let schedule = schedules
+            .entry(homeserver.clone())
+            .or_insert_with(|| PollSchedule::ready(now));
+
+        match result {
+            Ok(()) => schedule.record_success(Instant::now()),
+            Err(error) => {
+                let retry_after = schedule.record_failure(Instant::now());
+                warn!(
+                    %homeserver,
+                    %error,
+                    retry_after_seconds = retry_after.as_secs(),
+                    "watcher poll failed; cursor retained for retry"
+                );
+                state.game.write().await.note(
+                    "retry",
+                    format!(
+                        "Watcher paused {}s for {} after an error: {error}",
+                        retry_after.as_secs(),
+                        short_key(&homeserver)
+                    ),
+                );
+                state.notify("retry");
+            }
         }
     }
 }
@@ -177,4 +250,49 @@ async fn poll_homeserver(
 
 fn short_key(key: &str) -> &str {
     key.get(..8).unwrap_or(key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn successful_poll_waits_for_healthy_interval() {
+        let now = Instant::now();
+        let mut schedule = PollSchedule::ready(now);
+
+        assert!(schedule.is_due(now));
+        schedule.record_success(now);
+
+        assert!(!schedule.is_due(now + HEALTHY_POLL_INTERVAL - Duration::from_millis(1)));
+        assert!(schedule.is_due(now + HEALTHY_POLL_INTERVAL));
+    }
+
+    #[test]
+    fn failures_back_off_exponentially_and_stop_at_cap() {
+        let mut now = Instant::now();
+        let mut schedule = PollSchedule::ready(now);
+
+        for expected_seconds in [60, 120, 240, 480, 960, 1_920, 3_600, 3_600] {
+            let delay = schedule.record_failure(now);
+            assert_eq!(delay, Duration::from_secs(expected_seconds));
+            assert!(!schedule.is_due(now + delay - Duration::from_millis(1)));
+            now += delay;
+            assert!(schedule.is_due(now));
+        }
+    }
+
+    #[test]
+    fn success_resets_retry_backoff() {
+        let now = Instant::now();
+        let mut schedule = PollSchedule::ready(now);
+
+        schedule.record_failure(now);
+        schedule.record_success(now);
+
+        assert_eq!(
+            schedule.record_failure(now + HEALTHY_POLL_INTERVAL),
+            INITIAL_RETRY_BACKOFF
+        );
+    }
 }
