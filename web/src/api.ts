@@ -17,6 +17,11 @@ export async function registerWatcher(publicKey: string): Promise<Registration> 
   return response.json() as Promise<Registration>;
 }
 
+export async function requestWatcherPoll(): Promise<void> {
+  const response = await fetch(`${API}/api/poll`, { method: "POST" });
+  if (!response.ok) throw new Error(`Watcher poll API returned ${response.status}`);
+}
+
 export function subscribeToBoard(onUpdate: () => void): () => void {
   const events = new EventSource(`${API}/api/events`);
   events.addEventListener("update", onUpdate);

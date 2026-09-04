@@ -20,14 +20,17 @@ const MOVES_PATH: &str = "/pub/pubky-watcher-canvas/moves/";
 const EVENTS_PER_POLL: u16 = 50;
 const MAX_MOVE_BYTES: usize = 1_024;
 const SCHEDULER_TICK: Duration = Duration::from_secs(1);
-const HEALTHY_POLL_INTERVAL: Duration = Duration::from_secs(5);
-const INITIAL_RETRY_BACKOFF: Duration = Duration::from_secs(60);
-const MAX_RETRY_BACKOFF: Duration = Duration::from_secs(60 * 60);
+const HEALTHY_POLL_INTERVAL: Duration = Duration::from_secs(60);
+const MIN_TRIGGERED_POLL_INTERVAL: Duration = Duration::from_secs(10);
+const INITIAL_RETRY_BACKOFF: Duration = Duration::from_secs(10);
+const MAX_RETRY_BACKOFF: Duration = Duration::from_secs(60);
 
 #[derive(Debug)]
 struct PollSchedule {
     next_attempt: Instant,
     retry_backoff: Duration,
+    last_attempt: Option<Instant>,
+    backing_off: bool,
 }
 
 impl PollSchedule {
@@ -35,6 +38,8 @@ impl PollSchedule {
         Self {
             next_attempt: now,
             retry_backoff: INITIAL_RETRY_BACKOFF,
+            last_attempt: None,
+            backing_off: false,
         }
     }
 
@@ -43,15 +48,30 @@ impl PollSchedule {
     }
 
     fn record_success(&mut self, now: Instant) {
+        self.last_attempt = Some(now);
         self.next_attempt = now + HEALTHY_POLL_INTERVAL;
         self.retry_backoff = INITIAL_RETRY_BACKOFF;
+        self.backing_off = false;
     }
 
     fn record_failure(&mut self, now: Instant) -> Duration {
         let delay = self.retry_backoff;
+        self.last_attempt = Some(now);
         self.next_attempt = now + delay;
         self.retry_backoff = self.retry_backoff.saturating_mul(2).min(MAX_RETRY_BACKOFF);
+        self.backing_off = true;
         delay
+    }
+
+    fn request_poll(&mut self, now: Instant) {
+        if self.backing_off {
+            return;
+        }
+
+        let earliest = self.last_attempt.map_or(now, |last_attempt| {
+            last_attempt + MIN_TRIGGERED_POLL_INTERVAL
+        });
+        self.next_attempt = self.next_attempt.min(now.max(earliest));
     }
 }
 
@@ -137,6 +157,13 @@ pub async fn run(state: AppState, shutdown_rx: watch::Receiver<bool>) {
         tokio::select! {
             _ = interval.tick() => {
                 poll_once(&state, &mut schedules, shutdown_rx.clone()).await
+            },
+            _ = state.watcher_requests.notified() => {
+                let now = Instant::now();
+                for schedule in schedules.values_mut() {
+                    schedule.request_poll(now);
+                }
+                poll_once(&state, &mut schedules, shutdown_rx.clone()).await;
             },
             changed = wait_for_shutdown(shutdown_rx.clone()) => {
                 if changed {
@@ -273,7 +300,7 @@ mod tests {
         let mut now = Instant::now();
         let mut schedule = PollSchedule::ready(now);
 
-        for expected_seconds in [60, 120, 240, 480, 960, 1_920, 3_600, 3_600] {
+        for expected_seconds in [10, 20, 40, 60, 60, 60] {
             let delay = schedule.record_failure(now);
             assert_eq!(delay, Duration::from_secs(expected_seconds));
             assert!(!schedule.is_due(now + delay - Duration::from_millis(1)));
@@ -294,5 +321,29 @@ mod tests {
             schedule.record_failure(now + HEALTHY_POLL_INTERVAL),
             INITIAL_RETRY_BACKOFF
         );
+    }
+
+    #[test]
+    fn requested_poll_advances_a_healthy_schedule() {
+        let now = Instant::now();
+        let mut schedule = PollSchedule::ready(now);
+        schedule.record_success(now);
+
+        schedule.request_poll(now + Duration::from_secs(1));
+
+        assert!(!schedule.is_due(now + MIN_TRIGGERED_POLL_INTERVAL - Duration::from_millis(1)));
+        assert!(schedule.is_due(now + MIN_TRIGGERED_POLL_INTERVAL));
+    }
+
+    #[test]
+    fn requested_poll_does_not_bypass_error_backoff() {
+        let now = Instant::now();
+        let mut schedule = PollSchedule::ready(now);
+        let retry_after = schedule.record_failure(now);
+
+        schedule.request_poll(now + Duration::from_secs(1));
+
+        assert!(!schedule.is_due(now + retry_after - Duration::from_millis(1)));
+        assert!(schedule.is_due(now + retry_after));
     }
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { getBoard, registerWatcher, subscribeToBoard } from "./api";
+import { getBoard, registerWatcher, requestWatcherPoll, subscribeToBoard } from "./api";
 import { publishMove } from "./moves";
 import {
   restoreSavedIdentity,
@@ -153,6 +153,7 @@ export function App() {
     setStatus(`Publishing (${x}, ${y}) to your Pubky homeserver…`);
     try {
       await publishMove(identity.session, x, y, selectedColor);
+      await requestWatcherPoll();
       setStatus("Published. Waiting for the watcher to observe and index it…");
     } catch (error) {
       setStatus(message(error));

@@ -7,7 +7,7 @@ use axum::{
         sse::{Event, KeepAlive},
         Json, Sse,
     },
-    routing::{get, put},
+    routing::{get, post, put},
     Router,
 };
 use pubky::PublicKey;
@@ -45,6 +45,7 @@ pub fn router(state: AppState, static_dir: &str) -> Router {
         .route("/api/health", get(health))
         .route("/api/board", get(board))
         .route("/api/events", get(events))
+        .route("/api/poll", post(request_watcher_poll))
         .route("/api/watch/{public_key}", put(watch_user))
         .layer(TraceLayer::new_for_http())
         .fallback_service(files)
@@ -63,6 +64,11 @@ async fn board(State(state): State<AppState>) -> Json<Snapshot> {
         game,
         watched_users,
     })
+}
+
+async fn request_watcher_poll(State(state): State<AppState>) -> StatusCode {
+    state.request_watcher_poll();
+    StatusCode::ACCEPTED
 }
 
 async fn watch_user(

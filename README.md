@@ -76,7 +76,7 @@ npm run typecheck
 npm run build
 ```
 
-This is an educational demo, not a durable indexer: it does not persist cursors or board state or protect its public registration endpoint. It includes only a small per-homeserver polling policy: successful polls wait five seconds, while failures back off from 60 seconds to a one-hour cap. Those application responsibilities deliberately remain visible rather than being mistaken for watcher transport behavior.
+This is an educational demo, not a durable indexer: it does not persist cursors or board state or protect its public registration endpoint. It includes only a small per-homeserver polling policy: the UI requests a coalesced poll after publishing, a 60-second safety poll catches outside writers, and failures back off from 10 to 60 seconds. Those application responsibilities deliberately remain visible rather than being mistaken for watcher transport behavior.
 
 ## Deploy it
 
