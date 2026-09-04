@@ -15,13 +15,14 @@ header { display: flex; align-items: flex-start; justify-content: space-between;
 h1 { margin: 5px 0 10px; font-size: clamp(2.6rem, 7vw, 5.6rem); letter-spacing: -.065em; line-height: .95; }
 .eyebrow, .panel-title, .stage-label { margin: 0; color: #8f9bb4; font: 500 .72rem var(--mono); letter-spacing: .13em; }
 .lede { max-width: 660px; margin: 0; color: #a8afbf; font-size: 1.05rem; line-height: 1.55; }
-.connect { flex: none; padding: 13px 18px; border: 1px solid #90a7ff; border-radius: 8px; color: #0c0e12; background: #a9baff; font-weight: 700; cursor: pointer; box-shadow: 0 0 28px #6484ff33; }
+.connect { flex: none; padding: 13px 18px; border: 1px solid #90a7ff; border-radius: 8px; color: #0c0e12; background: #a9baff; font-weight: 700; text-decoration: none; cursor: pointer; box-shadow: 0 0 28px #6484ff33; }
 .connect:disabled { opacity: .55; cursor: wait; }
 .auth-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
 .ring-button { flex: none; padding: 12px 16px; border: 1px solid #343b4a; border-radius: 8px; color: #dfe4ef; background: #151820; font-weight: 600; cursor: pointer; }
 .ring-button:hover { border-color: #65708a; background: #1a1e28; }
 .ring-button:disabled { opacity: .55; cursor: wait; }
 .identity { padding: 11px 14px; border: 1px solid #2e3b35; border-radius: 8px; background: #151b18; color: #b6eccb; font: .78rem var(--mono); }
+.signed-in { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
 .live-dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #66e69a; box-shadow: 0 0 12px #66e69a; }
 
 .pipeline { display: flex; align-items: center; margin: 40px 0 22px; padding: 13px; overflow-x: auto; border: 1px solid #242833; border-radius: 12px; background: #111319cc; }
@@ -67,20 +68,20 @@ aside { display: flex; flex-direction: column; gap: 20px; min-height: 0; }
 .event-icon.move { background: #6d87ff; }.event-icon.resize { background: #b980ff; }.event-icon.watcher { background: #66e69a; }.event-icon.retry,.event-icon.rejected { background: #ff7d8f; }
 .activity strong { color: #aab3c6; font: 500 .65rem var(--mono); text-transform: uppercase; }
 .activity p { margin: 3px 0 0; color: #737d91; font-size: .76rem; line-height: 1.4; }
-.loading, .callback { display: grid; min-height: 100vh; place-items: center; color: #9ca6ba; font: .8rem var(--mono); }
-.callback { align-content: center; gap: 12px; }.callback a { color: #9fb0ff; }
+.loading { display: grid; min-height: 100vh; place-items: center; color: #9ca6ba; font: .8rem var(--mono); }
 .modal-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 20px; background: #05060ae8; backdrop-filter: blur(10px); }
 .qr-modal { position: relative; width: min(390px, 100%); padding: 26px; border: 1px solid #303747; border-radius: 16px; background: #12151c; text-align: center; box-shadow: 0 24px 90px #000a; }
 .qr-modal h2 { margin: 10px 0 7px; font-size: 1.55rem; }
 .qr-modal p:not(.eyebrow) { margin: 0 auto 17px; color: #8f99ad; font-size: .87rem; line-height: 1.45; }
 .qr-modal img { display: block; width: min(280px, 100%); margin: auto; border-radius: 9px; }
+.ring-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 9px; margin-top: 16px; }
 .qr-modal small { display: block; margin-top: 16px; color: #737d91; font: .67rem/1.45 var(--mono); }
 .modal-close { position: absolute; top: 9px; right: 11px; border: 0; color: #8993a8; background: transparent; font-size: 1.5rem; cursor: pointer; }
 
 @media (max-width: 820px) {
   main { padding-top: 28px; }
   header { flex-direction: column; }
-  .auth-actions { justify-content: flex-start; }
+  .auth-actions, .signed-in { justify-content: flex-start; }
   .workspace { grid-template-columns: 1fr; }
   .pipeline { margin-top: 28px; }
   .arrow { display: none; }

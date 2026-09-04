@@ -2,8 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { getBoard, registerWatcher, subscribeToBoard } from "./api";
 import { publishMove } from "./moves";
-import { signInWithPassport } from "./passport";
-import { createRingAttempt, type RingAttempt } from "./ring";
+import {
+  restoreSavedIdentity,
+  saveSession,
+  signOut,
+  startRingAuth,
+  type RingAttempt,
+} from "./ring";
 import type { Identity, Snapshot } from "./types";
 
 export function App() {
@@ -13,6 +18,7 @@ export function App() {
   const [status, setStatus] = useState("Loading watcher…");
   const [busy, setBusy] = useState(false);
   const [ringQr, setRingQr] = useState<string | null>(null);
+  const [ringUrl, setRingUrl] = useState<string | null>(null);
   const ringAttempt = useRef<RingAttempt | null>(null);
 
   const refresh = useCallback(async () => {
@@ -28,50 +34,80 @@ export function App() {
     return subscribeToBoard(() => void refresh());
   }, [refresh]);
 
+  const activateIdentity = useCallback(async (nextIdentity: Identity, restored = false) => {
+    // The SDK session is already authenticated and persisted. Watcher
+    // registration is separate and must not make the UI forget that session.
+    setIdentity(nextIdentity);
+    setStatus(restored ? "Session restored. Registering the watcher…" : "Signed in. Registering the watcher…");
+    try {
+      await registerWatcher(nextIdentity.publicKey);
+      setStatus("Signed in. The watcher is following your homeserver event stream.");
+      await refresh();
+    } catch (error) {
+      setStatus(`Signed in, but watcher registration failed: ${message(error)}`);
+    }
+  }, [refresh]);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const saved = await restoreSavedIdentity();
+        if (!active) return;
+        if (saved) await activateIdentity(saved, true);
+        else setStatus("Sign in with Pubky Ring to paint a pixel.");
+      } catch (error) {
+        if (active) setStatus(message(error));
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [activateIdentity]);
+
+  useEffect(() => () => ringAttempt.current?.cancel(), []);
+
   const pixels = useMemo(
     () => new Map(snapshot?.pixels.map((pixel) => [`${pixel.x}:${pixel.y}`, pixel])),
     [snapshot],
   );
 
-  const connect = async () => {
-    setBusy(true);
-    setStatus("Waiting for Passport approval…");
-    try {
-      const nextIdentity = await signInWithPassport();
-      await activateIdentity(nextIdentity);
-    } catch (error) {
-      setStatus(message(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const activateIdentity = async (nextIdentity: Identity) => {
-    await registerWatcher(nextIdentity.publicKey);
-    setIdentity(nextIdentity);
-    setStatus("Signed in. The watcher is following your homeserver event stream.");
-    await refresh();
-  };
-
   const showRingQr = async () => {
+    let attempt: RingAttempt | undefined;
+    let approvalAccepted = false;
     setBusy(true);
-    setStatus("Creating a pubkyauth:// request for Pubky Ring…");
+    setStatus("Creating a Pubky Ring grant request…");
     try {
-      const attempt = await createRingAttempt();
+      attempt = await startRingAuth();
       ringAttempt.current = attempt;
+      setRingUrl(attempt.authorizationUrl);
       setRingQr(await QRCode.toDataURL(attempt.authorizationUrl, {
         width: 320,
         margin: 2,
+        errorCorrectionLevel: "M",
         color: { dark: "#090b0f", light: "#ffffff" },
       }));
       setStatus("Scan the QR with Pubky Ring, review the capability, and approve.");
-      const nextIdentity = await attempt.waitForSession();
+      setBusy(false);
+
+      const session = await attempt.awaitApproval;
+      if (ringAttempt.current !== attempt) {
+        session.free();
+        return;
+      }
+      approvalAccepted = true;
       ringAttempt.current = null;
       setRingQr(null);
+      setRingUrl(null);
+      setBusy(true);
+      const nextIdentity = await saveSession(session);
       await activateIdentity(nextIdentity);
     } catch (error) {
+      if (!approvalAccepted && attempt && ringAttempt.current !== attempt) return;
+      ringAttempt.current = null;
       setStatus(message(error));
       setRingQr(null);
+      setRingUrl(null);
     } finally {
       setBusy(false);
     }
@@ -81,8 +117,34 @@ export function App() {
     ringAttempt.current?.cancel();
     ringAttempt.current = null;
     setRingQr(null);
+    setRingUrl(null);
     setBusy(false);
     setStatus("Ring sign-in cancelled.");
+  };
+
+  const disconnect = async () => {
+    if (!identity || busy) return;
+    setBusy(true);
+    setStatus("Signing out…");
+    try {
+      await signOut(identity);
+      setIdentity(null);
+      setStatus("Signed out. Sign in with Pubky Ring to paint again.");
+    } catch (error) {
+      setStatus(message(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyRingUrl = async () => {
+    if (!ringUrl) return;
+    try {
+      await navigator.clipboard.writeText(ringUrl);
+      setStatus("Pubky Ring authorization link copied.");
+    } catch (error) {
+      setStatus(message(error));
+    }
   };
 
   const paint = async (x: number, y: number) => {
@@ -116,23 +178,25 @@ export function App() {
           </p>
         </div>
         {identity ? (
-          <div className="identity" title={identity.publicKey}>
-            <span className="live-dot" /> {shortKey(identity.publicKey)}
+          <div className="signed-in">
+            <div className="identity" title={identity.publicKey}>
+              <span className="live-dot" /> {shortKey(identity.publicKey)}
+            </div>
+            <button className="ring-button" onClick={() => void disconnect()} disabled={busy}>
+              Sign out
+            </button>
           </div>
         ) : (
           <div className="auth-actions">
-            <button className="ring-button" onClick={() => void showRingQr()} disabled={busy}>
-              Show Ring QR
-            </button>
-            <button className="connect" onClick={() => void connect()} disabled={busy}>
-              Continue with Passport
+            <button className="connect" onClick={() => void showRingQr()} disabled={busy}>
+              Sign in with Pubky Ring
             </button>
           </div>
         )}
       </header>
 
       <section className="pipeline" aria-label="Data flow">
-        <Step number="1" title="Passport" detail="Grant session" active={busy && !identity} />
+        <Step number="1" title="Pubky Ring" detail="Grant session" active={busy && !identity} />
         <Arrow />
         <Step number="2" title="Your homeserver" detail="Stores move JSON" active={busy && !!identity} />
         <Arrow />
@@ -229,15 +293,19 @@ export function App() {
         </aside>
       </div>
 
-      {ringQr && (
+      {ringQr && ringUrl && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Pubky Ring sign in">
           <div className="qr-modal">
             <button className="modal-close" onClick={closeRingQr} aria-label="Close Ring QR">×</button>
-            <p className="eyebrow">PUBKYAUTH:// DIRECT RING PATH</p>
+            <p className="eyebrow">PUBKYAUTH:// GRANT REQUEST</p>
             <h2>Scan with Pubky Ring</h2>
             <p>Ring will independently show the requested canvas capability before you approve.</p>
             <img src={ringQr} alt="Pubky Ring authorization QR code" />
-            <small>The app still waits for the SDK session. Scanning alone does not sign you in.</small>
+            <div className="ring-links">
+              <a className="connect" href={ringUrl}>Authorize with Pubky Ring</a>
+              <button className="ring-button" onClick={() => void copyRingUrl()}>Copy link</button>
+            </div>
+            <small>The SDK completes and saves the session only after Ring approves the request.</small>
           </div>
         </div>
       )}

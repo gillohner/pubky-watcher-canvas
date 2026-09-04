@@ -1,6 +1,6 @@
 # Pubky Watcher Canvas
 
-A deliberately small multiplayer pixel game for understanding [`pubky-watcher`](https://github.com/tipogi/pubky-nexus/pull/7). Players authenticate through a grant-based [Pubky Passport](https://passport.pubky.app) popup, publish moves to their own homeserver, and watch a Rust service discover those moves through `/events-stream`.
+A deliberately small multiplayer pixel game for understanding [`pubky-watcher`](https://github.com/tipogi/pubky-nexus/pull/7). Players authenticate through a grant-based Pubky Ring flow, publish moves to their own homeserver, and watch a Rust service discover those moves through `/events-stream`.
 
 **Live demo:** <https://eventky.app/watcher-canvas/>
 
@@ -17,8 +17,7 @@ Each stage unlocks when every visible cell has been painted. There is no differe
 ```text
 Browser                         Player homeserver                Rust demo service
    │                                   │                                │
-   ├─ grant auth ────────► Passport popup                                │
-   ├─ pubkyauth://signin ► Ring QR                                       │
+   ├─ pubkyauth:// grant ► Ring QR                                       │
    │◄──────── SDK Session via relay ───┤                                │
    │                                   │                                │
    ├─ session.storage.putJson(move) ──►│                                │
@@ -29,9 +28,11 @@ Browser                         Player homeserver                Rust demo servi
 
 Important boundaries:
 
-- Only the Pubky SDK `Session` authenticates the player. Passport popup messages are UI signals.
-- The canvas offers two sign-in paths: **Continue with Passport** uses grant-based auth in a
-  popup, while **Show Ring QR** renders a direct `pubkyauth://signin` request for Ring.
+- The canvas uses the grant-based Pubky Ring flow from
+  [`pubky-app-templates`](https://github.com/pubky/pubky-app-templates).
+- Only `GrantAuthFlow.awaitApproval()` returning a Pubky SDK `Session` authenticates the player.
+- The SDK browser session store persists the session, and its returned record ID is saved in
+  `localStorage` so the session can be restored after a reload.
 - The client requests only `/pub/pubky-watcher-canvas/:rw`.
 - The service constructs one `WatcherClient` and injects clones into `Watcher::key_stream` and the move handler.
 - Every user key has its own event stream and cursor. Users are grouped by their resolved homeserver
@@ -43,7 +44,7 @@ The watcher dependency is pinned to the exact commit from the draft PR so the ex
 
 ## Run it
 
-Requirements: Rust stable, Node.js 24+, a Pubky identity, and Pubky Ring if you use the direct QR route.
+Requirements: Rust stable, Node.js 24+, a Pubky identity, and Pubky Ring.
 
 ```bash
 cd web
@@ -54,12 +55,14 @@ cd ..
 
 Open <http://localhost:5173>. Vite proxies `/api` to the Rust service at `127.0.0.1:3001`.
 
-Passport requires HTTPS callbacks. For local HTTP development this demo omits callback URLs and keeps polling the SDK relay, which remains the authoritative result. For a deployed build, copy `web/.env.example`, set `VITE_PUBLIC_ORIGIN` to the frontend's HTTPS origin and `VITE_API_URL` to the HTTPS API origin, then rebuild.
+The Ring authorization link is a sensitive, short-lived `pubkyauth://` request. The UI can render,
+open, or copy it but never logs it. Set `VITE_API_URL` only when the frontend and API are hosted on
+different origins.
 
 ## Read the important parts
 
-- `web/src/passport.ts` — grant flow, popup, secure outcome acknowledgement, callback fallback, relay polling, and browser session store.
-- `web/src/ring.ts` — direct `pubkyauth://signin` QR compatibility path based on the original canvas example.
+- `web/src/ring.ts` — template-based Ring grant lifecycle, approval, browser-store persistence,
+  reload restoration, and sign out.
 - `web/src/moves.ts` — writes one tiny JSON move through the authenticated session.
 - `src/watcher.rs` — groups registered keys by homeserver, injects `WatcherClient`, advances cursors only after successful handling, reads resources, and applies moves.
 - `src/game.rs` — validation and the requested resize sequence.

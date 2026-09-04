@@ -77,7 +77,7 @@ impl Game {
         };
         game.note(
             "watcher",
-            "Waiting for a Passport-authenticated player to register",
+            "Waiting for a Pubky Ring-authenticated player to register",
         );
         game
     }
